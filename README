@@ -1,0 +1,40 @@
+NAME
+    HTML::Ajax - Generate HTML and Javascript for Ajax
+
+SYNOPSIS
+        use HTML::Ajax;
+
+        my $ajax = HTML::Ajax->new;
+        print $ajax->library;
+        print $ajax->observe_field( $id, $url, $frequency, $update, $param );
+
+DESCRIPTION
+    Some stuff to make Ajax fun. It's just a beginning, but more little
+    helpers will come soon.
+
+  METHODS
+   $ajax->library
+    Returns our library of Javascript functions and objects, in a script
+    block.
+
+   $ajax->observe_field( $id, $url, $frequency, $update, $param )
+    id = DOM id of field to observe url = url to request frequency =
+    frequency for observation (defaults to 2) update = DOM id to change
+    innerHTML with responseText param = name of parameter for request
+    (defaults to value)
+
+   $ajax->raw_library
+    Returns our library of Javascript functions and objects.
+
+SEE ALSO
+    Catalyst::Plugin::Ajax, Catalyst.
+
+AUTHOR
+    Sebastian Riedel, "sri@oook.de"
+
+    Based on the work of Sascha Kiefer, "esskar@cpan.org"
+
+LICENSE
+    This library is free software . You can redistribute it and/or modify it
+    under the same terms as perl itself.
+
