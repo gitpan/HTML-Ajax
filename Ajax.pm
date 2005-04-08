@@ -3,7 +3,7 @@ package HTML::Ajax;
 use strict;
 use base 'Class::Accessor::Fast';
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 our $ajax    = do { local $/; <DATA> };
 
 =head1 NAME
@@ -16,12 +16,16 @@ HTML::Ajax - Generate HTML and Javascript for Ajax
 
     my $ajax = HTML::Ajax->new;
     print $ajax->library;
+    print $ajax->form_tag( $id, $url, $update );
     print $ajax->observe_field( $id, $url, $frequency, $update, $param );
+    print $ajax->observe_form( $id, $url, $frequency, $update );
+    print $ajax->link_to( $url, $text, $update );
+    print $ajax->link_field( $id, $url, $text, $update, $param );
 
 =head1 DESCRIPTION
 
 Some stuff to make Ajax fun.
-It's just a beginning, but more little helpers will come soon.
+It's just a good beginning, more little helpers will come soon.
 
 =head2 METHODS
 
@@ -37,19 +41,39 @@ sub library {
     return qq|<script type="text/javascript">\n<!--\n$out\n//-->\n</script>|;
 }
 
+=head3 $ajax->form_tag( $id, $url, $update )
+
+Returns a opening form tag using ajax instead of POST.
+
+    id     = DOM id for form
+    url    = url to request
+    update = DOM id to change innerHTML with responseText
+
+=cut
+
+sub form_tag {
+    my ( $self, $id, $uri, $update ) = @_;
+    die 'Form id needed!' unless $id;
+    die 'URI needed!'     unless $uri;
+    return <<"EOF";
+<form id="$id" action="javascript:submitForm( '$id', '$uri', '$update' )">
+EOF
+}
+
 =head3 $ajax->observe_field( $id, $url, $frequency, $update, $param )
 
-id        = DOM id of field to observe
-url       = url to request
-frequency = frequency for observation (defaults to 2)
-update    = DOM id to change innerHTML with responseText
-param     = name of parameter for request (defaults to value)
+Observes a field and makes a request for changes.
+
+    id        = DOM id of field to observe
+    url       = url to request
+    frequency = frequency for observation (defaults to 2)
+    update    = DOM id to change innerHTML with responseText
+    param     = name of parameter for request (defaults to value)
 
 =cut
 
 sub observe_field {
     my ( $self, $id, $uri, $freq, $update, $param ) = @_;
-    my $observer = $self->{observer}++;
     die 'Field id needed!' unless $id;
     die 'URI needed!'      unless $uri;
     $freq  ||= 2;
@@ -63,13 +87,80 @@ observeField( '$id', '$uri', $freq, '$update', '', '$param' );
 EOF
 }
 
+=head3 $ajax->observe_form( $id, $url, $frequency, $update )
+
+Observes a whole form with all fields and makes a request for changes.
+
+    id        = DOM id of form to observe
+    url       = url to request
+    frequency = frequency for observation (defaults to 2)
+    update    = DOM id to change innerHTML with responseText
+
+=cut
+
+sub observe_form {
+    my ( $self, $id, $uri, $freq, $update ) = @_;
+    die 'Form id needed!' unless $id;
+    die 'URI needed!'     unless $uri;
+    $freq ||= 2;
+    return <<"EOF";
+<script type="text/javascript">
+<!--
+observeForm( '$id', '$uri', $freq, '$update', '' );
+//-->
+</script>
+EOF
+}
+
+=head3 $ajax->link_to( $url, $text, $update )
+
+Creates a link that makes a request when pressed.
+
+    url    = url to request
+    text   = link text or html
+    update = DOM id to change innerHTML with responseText
+
+=cut
+
+sub link_to {
+    my ( $self, $uri, $text, $update ) = @_;
+    die 'URL needed!' unless $uri;
+    $update ||= '';
+    return <<"";
+<a href="javascript:linkTo( '$uri', '$update' );">$text</a>
+
+}
+
+=head3 $ajax->link_field( $id, $url, $text, $update, $param )
+
+Creates a link that submits a field value when pressed.
+
+    id     = DOM id of field to observe
+    url    = url to request
+    text   = link text or html
+    update = DOM id to change innerHTML with responseText
+    param  = name of parameter for request (defaults to value)
+
+=cut
+
+sub link_field {
+    my ( $self, $id, $uri, $text, $update, $param ) = @_;
+    die 'Field id needed!' unless $id;
+    die 'URL needed!'      unless $uri;
+    $update ||= '';
+    $param  ||= 'value';
+    return <<"";
+<a href="javascript:linkTo( '$id', '$uri', '$update', '$param' );">$text</a>
+
+}
+
 =head3 $ajax->raw_library
 
 Returns our library of Javascript functions and objects.
 
 =cut
 
-sub raw_library { $_[0]->{observer} = 0; return $ajax }
+sub raw_library { return $ajax }
 
 =head1 SEE ALSO
 
@@ -215,7 +306,7 @@ function callAjaxResponse() {
         : this.agent.responseText;
     res.xml          = this.agent.responseXML == null
         ? ''
-        : this.agent.responseXML.xml;
+        : this.agent.responseXML;
 
     var string = this.agent.getAllResponseHeaders();
     if (!string) string = '';
@@ -250,7 +341,7 @@ function observeField ( field, uri, freq, update, value, param ) {
         var ajax = new Ajax();
         ajax.post(
             uri,
-            param + '=' + current_value,
+            encodeURIComponent(param) + '=' + encodeURIComponent(current_value),
             function () {
                 var res = ajax.response();
                 if ( res && res.status == 200 )
@@ -264,5 +355,91 @@ function observeField ( field, uri, freq, update, value, param ) {
             observeField( field, uri, freq, update, current_value, param );
         },
         freq * 1000
+    );
+}
+
+function serializeForm (form) {
+    var elements = document.getElementById(form).elements;
+    var fields = new Array();
+    for ( var i = 0; i < elements.length; i++ ) {
+        var element = elements[i];
+        switch (element.type.toLowerCase()) {
+            case 'hidden':
+            case 'password':
+            case 'text':
+                fields.push( element.name + '=' + element.value );
+            case 'checkbox':
+            case 'radio':
+                if (element.checked)
+                    fields.push(
+                        encodeURIComponent(element.name)
+                        + '=' +
+                        encodeURIComponent(element.value)
+                    );
+        }
+    }
+    return fields.join('&');
+}
+
+function observeForm ( form, uri, freq, update, value ) {
+    var current_value = serializeForm(form);
+    if ( value != current_value) {
+        var ajax = new Ajax();
+        ajax.post(
+            uri,
+            current_value,
+            function () {
+                var res = ajax.response();
+                if ( update && res && res.status == 200 )
+                    document.getElementById(update).innerHTML = res.text;
+            }
+        );
+    }
+    setTimeout(
+        function() {
+            observeForm( form, uri, freq, update, current_value );
+        },
+        freq * 1000
+    );
+}
+
+function submitForm ( form, uri, update ) {
+    var value = serializeForm(form);
+    var ajax = new Ajax();
+    ajax.post(
+        uri,
+        value,
+        function () {
+            var res = ajax.response();
+            if ( update && res && res.status == 200 )
+                document.getElementById(update).innerHTML = res.text;
+        }
+    );
+}
+
+function linkTo ( uri, update ) {
+    var ajax = new Ajax();
+    ajax.post(
+        uri,
+        '',
+        function () {
+            var res = ajax.response();
+            if ( update && res && res.status == 200 )
+                document.getElementById(update).innerHTML = res.text;
+        }
+    );
+}
+
+function linkField ( field, uri, update, param ) {
+    var value = document.getElementById(field).value;
+    var ajax = new Ajax();
+    ajax.post(
+        uri,
+        encodeURIComponent(param) + '=' + encodeURIComponent(value),
+        function () {
+            var res = ajax.response();
+            if ( update && res && res.status == 200 )
+                document.getElementById(update).innerHTML = res.text;
+        }
     );
 }
